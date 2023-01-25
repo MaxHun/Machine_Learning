@@ -4,13 +4,26 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import tensorflow_datasets as tfds
-dataset = tfds.load('mnist', split='train', as_supervised=True)
-dataset.batch(10, drop_remainder=False)
+(ds_train, ds_test) = tfds.load('mnist', split=['train', 'test'], as_supervised=True)
+
+
+ds_train.batch(100000, drop_remainder=False)
+ds_train.cache()
 np.set_printoptions(threshold=np.inf, linewidth=np.inf)
-arr_4 = np.array(list(tfds.as_numpy(dataset)))[:,0][0][:,:,0]
-plt.imshow(arr_4)
-plt.show()
-#print(np.array(list(tfds.as_numpy(dataset)))[:,1][0])
+
+data_ite = tfds.as_numpy(ds_train)
+images_train = [i[0] for i in data_ite]
+labels_train = [i[1] for i in data_ite]
+
+# ~ # To get one image:
+# ~ arr_4 = np.array(list(tfds.as_numpy(dataset)))[:,0][0][:,:,0]
+# list(tfds.as_numpy(dataset)) is a list of 2-tupels whose entries are 
+#  an image and a scalar
+
+
+#print(next(iter(tfds.as_numpy(dataset)))[1])
+
+
 def get_array(dataset):
     for image, label in tfds.as_numpy(dataset):
         print(image.shape, type(label), label)

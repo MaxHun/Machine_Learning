@@ -1,10 +1,13 @@
 import numpy as np
+from matplotlib import pyplot as plt
 
 class NeuralNet(object):
     
     def __init__(self, len_input=1, layers=None, loadfile = None, savefile=None, loss_type="binary_cross_entropy", alpha=0.1): # NeuralNet([[128, "logistic"], ...], )
         self.alpha = alpha
         self.layers = []
+        self.dim_in = len_input
+
         if savefile != None:
             self.savefile = savefile
             
@@ -30,7 +33,6 @@ class NeuralNet(object):
                 except KeyError:
                     self.dim_out = num_neurons
                     break
-        self.dim_in = self.layers[0].num_neurons
         self.inputs = np.zeros(self.dim_in)
         self.loss_type = loss_type
         self.loss_fct = self.get_loss_fct()
@@ -70,10 +72,9 @@ class NeuralNet(object):
             curr = self.layers[index].forward(curr)
         return curr
         
-    def run_badge(self, badge):
-        
-        y = np.zeros((self.dim_out, len(badge)))
-        for i, x in enumerate(badge):
+    def run_batch(self, batch):
+        y = np.zeros((self.dim_out, len(batch)))
+        for i, x in enumerate(batch):
             self.inputs += x
             y[i,:] = self.run_instance(x)
         return y
@@ -91,9 +92,10 @@ class NeuralNet(object):
         max_der = 100
         while max_der > 1:
             self.delete_activations()
-            y_hat = self.run_badge(x_badge)
-            print(f"The cost is {sum(self.loss_fct(y_hat, y_batch))\
-                                /len(self.loss_fct(y_hat, y_batch))}")
+            y_hat = self.run_batch(x_batch)
+            print("The cost is ",\
+            sum(self.loss_fct(y_hat, y_batch))\
+            /len(self.loss_fct(y_hat, y_batch)))
             dc_dw, dc_dw = self.backward(y_hat, y_batch)
             for layer, i in enumerate(self.num_layers):
                 layer.weights -= self.alpha/len(x_batch)*dc_dw[i]
@@ -116,7 +118,7 @@ class NeuralNet(object):
         return dc_dw, dc_db
         
         
-    def train(self, x, y, badge_size=1, num_epochs=1):
+    def train(self, x, y, batch_size=1, num_epochs=1):
         rng = np.random.default_rng(1)
         for e in range(num_epochs):
             print(f"Starting epoch {e}...")
@@ -136,7 +138,7 @@ class NeuralNet(object):
         for x, y in zip(x_text, y_test):
             y_hat = self.run_instance(x)
             if not y == y_hat:
-                errors[(y,y_hat)] = errors[(y,y_hat)] + 1 if (y,y_hat)\ß
+                errors[(y,y_hat)] = errors[(y,y_hat)] + 1 if (y,y_hat)\
                                     in errors else 1
         num_errors = sum([errors[i] for i in errors])
         print(f"We tested {len(x_test)} many instances, out of which" +\
@@ -158,15 +160,15 @@ class NeuralLayer(object):
     def __init__(self, num_neurons, dim_in, neu_type="logistic",
                  weights = None, bias=None):
         if weights == None:
-            self.weights = np.zeros((dim_in, num_neurons))
-        elif weights.shape == (dim_in, num_neurons):
+            self.weights = np.zeros((num_neurons, dim_in))
+        elif weights.shape == (num_neurons, dim_in):
             self.weights = weights
         else:
             raise ValueError("dimension of weights" +\
                              " and input do not match")
         if bias == None:
-            self.bias = np.zeros(dim_in)
-        elif len(bias) == dim_in:
+            self.bias = np.zeros(num_neurons)
+        elif len(bias) == num_neurons:
             self.bias = bias
         else:
             raise ValueError("dimension of bias" +\
@@ -180,7 +182,7 @@ class NeuralLayer(object):
         self.neu_type = neu_type
     
     def forward(self, x):
-        z = np.matmul(self.weights, x) + b
+        z = np.matmul(self.weights, x) + self.bias
         self.zs += z
         a = self.act_fct(z)
         self.activations += a
@@ -215,10 +217,31 @@ class NeuralLayer(object):
         
         
 if __name__ == "__main__":
-    N = NeuralNet(1, [[4, "logistic"],[4, "logistic"], [1, "logistic"]],\
+    
+    data = np.load("data/mnist_data.npz")
+    images_train = data["images_train"][np.isin(data["labels_train"], [0,1])][:,:,:,0].reshape(len(data["labels_train"][np.isin(data["labels_train"], [0,1])]),28**2)
+    labels_train = data["labels_train"][np.isin(data["labels_train"], [0,1])]
+    
+    images_test = data["images_test"][np.isin(data["labels_test"], [0,1])][:,:,:,0].reshape(len(data["labels_test"][np.isin(data["labels_test"], [0,1])]),28**2)
+    labels_test = data["labels_test"][np.isin(data["labels_test"], [0,1])]
+    
+    print(images_train.shape)
+    print(images_test.shape)
+    
+    plotting = False
+    if plotting == True:
+        for k in range(10):
+            image = images_test[k].reshape(28,28)
+            plt.imshow(image)
+            print(labels_test[k])
+            plt.show()
+        
+        
+
+    N = NeuralNet(28**2, [[128, "logistic"],[8, "logistic"], [1, "logistic"]],\
                   loadfile=None, savefile="trained/test")
     
     
     
-    N.train(x_train, y_train, badge_size = 100, num_epochs = 6)
+    N.train(images_train, labels_train, batch_size = 100, num_epochs = 6)
     N.test(x_text, y_test)

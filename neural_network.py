@@ -8,7 +8,7 @@ import tensorflow_datasets as tfds
     as_supervised=True,
     with_info=True,
 )
-print(ds_info)
+#print(ds_info)
 
 
 def normalize_img(image, label):
@@ -23,10 +23,6 @@ ds_train = ds_train.batch(128)
 ds_train = ds_train.prefetch(tf.data.AUTOTUNE)
 
 
-a = list(ds_train.as_numpy_iterator())
-print(type(ds_train))
-
-
 
 
 ds_test = ds_test.map(
@@ -37,21 +33,31 @@ ds_test = ds_test.prefetch(tf.data.AUTOTUNE)
 
 model = tf.keras.models.Sequential([
   tf.keras.layers.Flatten(input_shape=(28, 28)),
-  tf.keras.layers.Dense(128, activation='relu'),
+  tf.keras.layers.Dense(128, activation='sigmoid'),
   tf.keras.layers.Dense(10)
 ])
+
 model.compile(
     optimizer=tf.keras.optimizers.Adam(0.001),
     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
     metrics=[tf.keras.metrics.SparseCategoricalAccuracy()],
 )
 
+print(list(map(lambda x: x.name, model.layers)))
+
+
 model.fit(
     ds_train,
-    epochs=6,
+    epochs=1,
     validation_data=ds_test,
 )
 
+intermediate_output = tf.keras.Model(model.input, 
+                                     model.get_layer('dense').output)
+images = ds_test.map(lambda images, labels: images)                                     
+images = [i for i in images]
+extracted = intermediate_output(images[11])
 
+print(extracted)
 
 

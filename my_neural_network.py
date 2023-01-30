@@ -5,13 +5,13 @@ import time
 
 class NeuralNet(object):
     
-    def __init__(self, len_input=1, layers=None, loadfile = None, savefile=None, loss_type="binary_cross_entropy", alpha=0.1): # NeuralNet([[128, "logistic"], ...], )
+    def __init__(self, len_input=1, layers=None, loadfile = None, savefile=None, loss_type="binary_cross_entropy", alpha=.5): # NeuralNet([[128, "logistic"], ...], )
         self.alpha = alpha
         self.layers = []
         self.dim_in = len_input
 
-        if savefile != None:
-            self.savefile = savefile
+        self.savefile = savefile
+        
             
         if loadfile == None: # initialise everything with weight 0
             dim_in = len_input
@@ -53,7 +53,7 @@ class NeuralNet(object):
         
     def delta_L(self, y_hat, y): 
         if self.loss_type == "binary_cross_entropy": # only works with sigmoid activation
-            return  np.array([1/len(y_hat)*np.sum(y - y_hat)]) # missing sigma term??, change for multidim output
+            return  -y*(1 - y_hat) + (1 - y)*y_hat # missing sigma term??, change for multidim output
         
         
     def save_net(self):
@@ -73,9 +73,14 @@ class NeuralNet(object):
         self.layers.insert(index, NeuralLayer(num_neurons, dim_in))
         
     def run_instance(self, x):
+        # ~ print("We start a new instance")
+        # ~ print(f"x is {x}")
         curr = x
         for index in range(self.num_layers):
+            # ~ print(f"{curr=}")
             curr = self.layers[index].forward(curr)
+            #time.sleep(1.3)
+        # ~ print("we finished the instance")
         return curr
         
     def run_batch(self, batch):
@@ -98,10 +103,10 @@ class NeuralNet(object):
         max_der = 100
         max_ite = 100
         ite = 0
-        while  ite < max_ite:
+        while  ite < max_ite and np.abs(max_der) > 3:
             # print("ite", ite)
             ite += 1
-            self.delete_activations()
+            #self.delete_activations()
             y_hat = self.run_batch(x_batch)
             #print([np.linalg.norm(i.activations) for i in self.layers])
             #print(y_hat.shape)
@@ -109,7 +114,7 @@ class NeuralNet(object):
             print("The cost is ",\
             np.sum(self.loss_fct(y_hat, y_batch))\
             /len(self.loss_fct(y_hat, y_batch)))
-            dc_dw, dc_db = self.backward(y_hat, y_batch)
+            dc_dw, dc_db = self.backward(x_batch, y_batch)
             for i, layer in enumerate(self.layers):
                 #print(f"{layer.weights.shape=}, {dc_dw[i].shape=}")
                 layer.weights -= self.alpha/len(x_batch)*dc_dw[i]
@@ -135,21 +140,19 @@ class NeuralNet(object):
             a = x
             for j, layer in enumerate(self.layers):
                 zs[j] = layer.forward(a)
-                a = layer.act_fct(z[j])
+                a = layer.act_fct(zs[j])
                 acts[j+1] = a
             dc_db_inst[-1] = self.delta_L(a, y)
             for i in range(len(dc_db)-2, -1, -1):
                 
-                dc_db_inst[i] = np.matmul(self.layers[i+1].weights.T, dc_db[i+1])\
+                dc_db_inst[i] = np.matmul(self.layers[i+1].weights.T, dc_db_inst[i+1])\
                            *self.layers[i].act_fct_der(zs[i])#TODO
                 #print(i, f"{(n(self.layers[i+1].weights.T),n(dc_db[i+1]), n(dc_db[i]), n(self.layers[i].act_fct_der(self.layers[i].zs)))=}")
                 #print(i, f"{(self.layers[i].zs)=}") # z is too big so sigma'(z) gives 0
-                if i > 0:
-                    dc_dw[i] = np.outer(dc_db[i],self.layers[i-1].activations) 
+                dc_dw_inst[i] = np.outer(dc_db_inst[i], acts[i]) 
                     #print(i, np.linalg.norm(self.layers[i-1].activations))
-                else:
-                    dc_dw[i] = np.outer(dc_db[i], self.inputs)
-                    #print(i, np.linalg.norm(self.inputs))
+            dc_db = [a + b for a, b in zip(dc_db, dc_db_inst)]
+            dc_dw = [a + b for a, b in zip(dc_dw, dc_dw_inst)]
         return dc_dw, dc_db
         
         
@@ -174,16 +177,20 @@ class NeuralNet(object):
         errors = dict()
         for x, y in zip(x_test, y_test):
             y_hat = self.run_instance(x)
+            y_hat = int(self.convert_result(y_hat))
+            y = int(y)
             if not y == y_hat:
-                #print(x, y_hat)
-                errors[(int(y),int(y_hat+.5))] = errors[(int(y),int(y_hat+.5))] + 1 if (int(y),int(y_hat+.5))\
+                im = x.reshape((28,28))
+                plt.imshow(im)
+                plt.show()
+                errors[(y,y_hat)] = errors[(y,y_hat)] + 1 if (y,y_hat)\
                                     in errors else 1
         num_errors = sum([errors[i] for i in errors])
-        print(f"We tested {len(x_test)} many instances, out of which" +\
+        print(f"We tested {len(x_test)} instances, out of which " +\
               f"{num_errors} were erroneous, which corresponds to an " +\
               f"accuracy of {1-num_errors/len(x_test)}")
         for e, o in errors:
-            print(f"{errors[(e,o)]} many instances gave {o}, while " +\
+            print(f"{errors[(e,o)]} instances gave {o}, while " +\
                   f"{e} was expected.")
         
         
@@ -198,7 +205,7 @@ class NeuralLayer(object):
     def __init__(self, num_neurons, dim_in, neu_type="logistic",
                  weights = None, bias=None):
         if weights == None:
-            self.weights = np.random.rand(num_neurons, dim_in)
+            self.weights = -np.random.rand(num_neurons, dim_in)
         elif weights.shape == (num_neurons, dim_in):
             self.weights = weights
         else:
@@ -220,17 +227,11 @@ class NeuralLayer(object):
         self.neu_type = neu_type
     
     def forward(self, x):
-        # ~ im = x.reshape((28,28))
-        # ~ plt.imshow(im)
-        # ~ plt.show()
-        # ~ 
         z = np.matmul(self.weights, x) + self.bias
+        
         self.zs += z
         a = self.act_fct(z)
         self.activations += a
-        # ~ print(n(a))
-        # ~ time.sleep(0.1)
-        #self.batch_size += 1
         return a
     
     def delete_activations(self):
@@ -283,17 +284,18 @@ if __name__ == "__main__":
         
 
     N = NeuralNet(28**2, [[128, "logistic"],[8, "logistic"], [1, "logistic"]],\
-                  # loadfile="trained/test.npz",\
-                  savefile="trained/test")
+                  loadfile="trained/test_1.npz")#,\
+                  #savefile="trained/test_1")
     
     
-    Training = 1
+    Training = 0
     if Training:
-        N.train(images_train, labels_train, batch_size = 500, num_epochs = 2)
+        N.train(images_train, labels_train, batch_size = 50, num_epochs = 2)
         print("Training is done")
-    #print([np.linalg.norm(i.weights) for i in N.layers])
-    N.save_net()
-    
-    print(N.layers[2].weights)
+    # ~ for layer in N.layers:
+        # ~ layer.bias = np.zeros(len(layer.bias))
+    print([np.linalg.norm(i.weights) for i in N.layers])
+    print([np.linalg.norm(i.bias) for i in N.layers])
+    #N.save_net()
     
     N.test(images_test, labels_test)
